@@ -418,3 +418,169 @@ class ParaphraserEngine:
         
         # Rejoin paragraphs with double newlines
         return '\n\n'.join(paraphrased_paragraphs)
+
+
+class SemanticValidator:
+    """
+    QA validator that checks if paraphrased text maintains semantic meaning
+    while being appropriately humanized.
+    """
+    
+    def __init__(self):
+        self.stop_words = set(stopwords.words('english'))
+    
+    def extract_key_terms(self, text):
+        """Extract key terms (nouns and important verbs) from text."""
+        tokens = word_tokenize(text.lower())
+        pos_tags = pos_tag(tokens)
+        
+        key_terms = set()
+        for word, pos in pos_tags:
+            # Keep nouns, verbs, and adjectives
+            if pos in ['NN', 'NNS', 'VB', 'VBD', 'VBG', 'VBN', 'VBP', 'VBZ', 'JJ']:
+                if word not in self.stop_words and word.isalpha() and len(word) > 2:
+                    key_terms.add(word)
+        
+        return key_terms
+    
+    def calculate_semantic_similarity(self, original_text, paraphrased_text):
+        """
+        Calculate semantic similarity between original and paraphrased text.
+        Returns a score from 0 to 100 indicating preservation of meaning.
+        
+        Args:
+            original_text: Original input text
+            paraphrased_text: Paraphrased output text
+            
+        Returns:
+            Dictionary with similarity metrics and validation results
+        """
+        # Extract key terms from both texts
+        original_terms = self.extract_key_terms(original_text)
+        paraphrased_terms = self.extract_key_terms(paraphrased_text)
+        
+        # Calculate overlap
+        common_terms = original_terms.intersection(paraphrased_terms)
+        if len(original_terms) == 0:
+            similarity_score = 100
+        else:
+            similarity_score = (len(common_terms) / len(original_terms)) * 100
+        
+        # Check for missing key concepts
+        missing_terms = original_terms - paraphrased_terms
+        added_terms = paraphrased_terms - original_terms
+        
+        # Calculate text length ratio (should be similar)
+        original_length = len(original_text.split())
+        paraphrased_length = len(paraphrased_text.split())
+        length_ratio = min(paraphrased_length, original_length) / max(paraphrased_length, original_length) * 100
+        
+        # Overall assessment
+        is_semantic_match = similarity_score >= 75  # 75% threshold for acceptable paraphrase
+        is_humanized = paraphrased_length != original_length  # Should have some changes
+        
+        return {
+            'similarity_score': round(similarity_score, 2),
+            'length_similarity': round(length_ratio, 2),
+            'original_key_terms': len(original_terms),
+            'preserved_terms': len(common_terms),
+            'missing_terms': list(missing_terms)[:5] if missing_terms else [],  # Show first 5
+            'new_terms_added': len(added_terms),
+            'semantic_match': is_semantic_match,
+            'is_humanized': is_humanized,
+            'quality_status': self._get_quality_status(similarity_score, is_humanized),
+            'recommendations': self._get_recommendations(similarity_score, is_humanized, missing_terms)
+        }
+    
+    def improve_paraphrase(self, original_text, paraphrased_text, engine):
+        """
+        Intelligently improve paraphrased text based on validation results.
+        Works internally without user interaction.
+        
+        Args:
+            original_text: Original input text
+            paraphrased_text: Current paraphrased text
+            engine: ParaphraserEngine instance to re-paraphrase if needed
+            
+        Returns:
+            Improved paraphrased text
+        """
+        validation = self.calculate_semantic_similarity(original_text, paraphrased_text)
+        
+        # If semantic match is good (>=75%) and humanized, return as-is
+        if validation['semantic_match'] and validation['is_humanized']:
+            return paraphrased_text
+        
+        # If similarity is too low, try to incorporate missing terms
+        if validation['similarity_score'] < 75 and validation['missing_terms']:
+            improved = self._reincorporate_missing_terms(
+                paraphrased_text, 
+                list(validation['missing_terms'])[:5]
+            )
+            return improved
+        
+        # If not humanized enough, apply more humanization
+        if not validation['is_humanized']:
+            # Text is too similar - needs more changes
+            # Re-paraphrase with slightly higher internal intensity
+            improved = engine.replace_with_synonyms(paraphrased_text, intensity=0.4)
+            improved = engine.add_variations(improved)
+            return improved
+        
+        return paraphrased_text
+    
+    def _reincorporate_missing_terms(self, paraphrased_text, missing_terms):
+        """
+        Try to reincorporate important missing terms where they make sense.
+        """
+        result = paraphrased_text
+        
+        # Find sentences that might be missing the concepts
+        sentences = sent_tokenize(paraphrased_text)
+        modified_sentences = []
+        
+        for sentence in sentences:
+            modified = sentence
+            # Check each missing term
+            for term in missing_terms:
+                if term.lower() not in modified.lower() and len(modified) > 30:
+                    # This sentence could benefit from including this term
+                    # Try to add it naturally
+                    words = modified.split()
+                    if len(words) > 10:
+                        # Insert near the beginning or middle
+                        insert_pos = len(words) // 2
+                        words.insert(insert_pos, term)
+                        modified = ' '.join(words)
+                        break  # Only add one per sentence
+            
+            modified_sentences.append(modified)
+        
+        return ' '.join(modified_sentences)
+    
+    def _get_quality_status(self, similarity_score, is_humanized):
+        """Determine quality status of paraphrase (internal only)."""
+        if similarity_score < 60:
+            return "POOR"
+        elif similarity_score < 75:
+            return "FAIR"
+        elif not is_humanized:
+            return "NOT_HUMANIZED"
+        else:
+            return "GOOD"
+    
+    def _get_recommendations(self, similarity_score, is_humanized, missing_terms):
+        """Generate internal recommendations (not for user display)."""
+        recommendations = []
+        
+        if similarity_score < 75:
+            recommendations.append("low_similarity")
+        
+        if not is_humanized:
+            recommendations.append("needs_humanization")
+        
+        if missing_terms:
+            recommendations.append("missing_terms")
+        
+        return recommendations
+
