@@ -1,4 +1,0 @@
-Flask>=2.0.0
-nltk>=3.8.0
-better-profanity>=0.7.0
-gunicorn>=20.1.0
