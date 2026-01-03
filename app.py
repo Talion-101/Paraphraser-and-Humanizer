@@ -1,22 +1,44 @@
 from flask import Flask, render_template, request, jsonify
 import os
-from paraphraser import ParaphraserEngine, SemanticValidator
-from ai_avoider import AIDetectionAvoider
+import sys
+import traceback
 import nltk
 
 # Initialize Flask app
 app = Flask(__name__)
 
-# Initialize engines
-# We do this globally so they are loaded once when the worker starts
+# Configure NLTK data path for Render
+# Render often downloads to /opt/render/nltk_data but might not have it in path by default
+nltk_path = '/opt/render/nltk_data'
+if os.path.exists(nltk_path):
+    if nltk_path not in nltk.data.path:
+        nltk.data.path.append(nltk_path)
+
+# Import engines AFTER configuring nltk path
+# We need to use try-except for imports in case of dependency issues
 try:
-    engine = ParaphraserEngine()
-    avoider = AIDetectionAvoider()
-    validator = SemanticValidator()
-    print("Engines initialized successfully.")
+    from paraphraser import ParaphraserEngine, SemanticValidator
+    from ai_avoider import AIDetectionAvoider
+except ImportError as e:
+    print(f"Import Error: {e}", file=sys.stderr)
+    traceback.print_exc(file=sys.stderr)
+    ParaphraserEngine = None
+    SemanticValidator = None
+    AIDetectionAvoider = None
+
+# Initialize engines
+try:
+    if ParaphraserEngine:
+        engine = ParaphraserEngine()
+        avoider = AIDetectionAvoider()
+        validator = SemanticValidator()
+        print("Engines initialized successfully.", file=sys.stderr)
+    else:
+        engine = None
+        print("Engines failed to import.", file=sys.stderr)
 except Exception as e:
-    print(f"Error initializing engines: {e}")
-    # Fallback or error handling
+    print(f"Error initializing engines: {e}", file=sys.stderr)
+    traceback.print_exc(file=sys.stderr)
     engine = None
     avoider = None
     validator = None
@@ -28,7 +50,7 @@ def index():
 @app.route('/paraphrase', methods=['POST'])
 def paraphrase():
     if not engine:
-        return jsonify({'error': 'Server initialization failed'}), 500
+        return jsonify({'error': 'Server initialization failed. Check server logs.'}), 500
 
     data = request.json
     text = data.get('text', '')
@@ -52,6 +74,9 @@ def paraphrase():
         return jsonify({'result': paraphrased})
         
     except Exception as e:
+        # LOG THE FULL ERROR
+        print(f"Error processing request: {e}", file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
         return jsonify({'error': str(e)}), 500
 
 @app.route('/health')
