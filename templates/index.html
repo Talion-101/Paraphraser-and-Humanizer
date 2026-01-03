@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Paraphraser & Humanizer</title>
+    <style>
+        :root {
+            --bg-color: #1a1a1a;
+            --card-bg: #2d2d2d;
+            --text-color: #ffffff;
+            --accent-color: #007AFF;
+            --accent-hover: #0063cf;
+            --border-radius: 12px;
+            --input-bg: #3a3a3a;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 1000px;
+            background-color: var(--card-bg);
+            padding: 30px;
+            border-radius: var(--border-radius);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            font-weight: 600;
+        }
+
+        .workspace {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        @media (max-width: 768px) {
+            .workspace {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .column {
+            display: flex;
+            flex-direction: column;
+        }
+
+        label {
+            margin-bottom: 10px;
+            font-weight: 500;
+            color: #ccc;
+        }
+
+        textarea {
+            background-color: var(--input-bg);
+            border: 1px solid #4d4d4d;
+            color: var(--text-color);
+            border-radius: 8px;
+            padding: 15px;
+            font-size: 16px;
+            resize: vertical;
+            min-height: 300px;
+            font-family: inherit;
+            transition: border-color 0.2s;
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: var(--accent-color);
+        }
+
+        .controls {
+            grid-column: 1 / -1;
+            background-color: #252525;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        button {
+            background-color: var(--accent-color);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: background-color 0.2s;
+            margin-left: auto;
+        }
+
+        button:hover {
+            background-color: var(--accent-hover);
+        }
+
+        button:disabled {
+            background-color: #4d4d4d;
+            cursor: not-allowed;
+        }
+
+        input[type="range"] {
+            -webkit-appearance: none;
+            width: 150px;
+            height: 6px;
+            background: #4d4d4d;
+            border-radius: 3px;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 18px;
+            width: 18px;
+            border-radius: 50%;
+            background: var(--accent-color);
+            cursor: pointer;
+            margin-top: -6px; /* You need to specify a margin in Chrome, but in Firefox and IE it is automatic */
+        }
+        
+        input[type="range"]::-moz-range-track {
+            width: 100%;
+            height: 6px;
+            cursor: pointer;
+            background: #4d4d4d;
+            border-radius: 3px;
+        }
+
+        .checkbox-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            margin-top: 10px;
+            color: #888;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Paraphraser & Humanizer</h1>
+    
+    <div class="controls">
+        <div class="control-group">
+            <label for="intensity">Intensity:</label>
+            <input type="range" id="intensity" min="0.1" max="1.0" step="0.1" value="0.6" oninput="document.getElementById('intensity-val').textContent = Math.round(this.value * 100) + '%'">
+            <span id="intensity-val">60%</span>
+        </div>
+        
+        <div class="control-group">
+            <div class="checkbox-wrapper" onclick="document.getElementById('humanize').click()">
+                <input type="checkbox" id="humanize" checked>
+                <span>Humanize (AI Avoidance)</span>
+            </div>
+        </div>
+
+        <button id="paraphraseBtn" onclick="paraphrase()">Paraphrase Text</button>
+    </div>
+
+    <div class="workspace">
+        <div class="column">
+            <label for="input-text">Original Text</label>
+            <textarea id="input-text" placeholder="Paste your text here..."></textarea>
+        </div>
+        <div class="column">
+            <label for="output-text">Result</label>
+            <textarea id="output-text" readonly placeholder="Paraphrased text will appear here..."></textarea>
+            <div class="loading" id="loading">Processing...</div>
+        </div>
+    </div>
+</div>
+
+<script>
+    async function paraphrase() {
+        const text = document.getElementById('input-text').value.trim();
+        const intensity = parseFloat(document.getElementById('intensity').value);
+        const humanize = document.getElementById('humanize').checked;
+        const btn = document.getElementById('paraphraseBtn');
+        const loading = document.getElementById('loading');
+        const output = document.getElementById('output-text');
+
+        if (!text) {
+            alert("Please enter some text first.");
+            return;
+        }
+
+        btn.disabled = true;
+        loading.style.display = 'block';
+        output.value = '';
+
+        try {
+            const response = await fetch('/paraphrase', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    text: text,
+                    intensity: intensity,
+                    humanize: humanize
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+
+            const data = await response.json();
+            
+            if (data.error) {
+                alert("Error: " + data.error);
+            } else {
+                output.value = data.result;
+            }
+
+        } catch (error) {
+            console.error('Error:', error);
+            alert("An error occurred while processing.");
+        } finally {
+            btn.disabled = false;
+            loading.style.display = 'none';
+        }
+    }
+</script>
+
+</body>
+</html>
