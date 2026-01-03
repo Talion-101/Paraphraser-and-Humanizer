@@ -3,10 +3,11 @@ services:
     name: paraphraser-web
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn -b 0.0.0.0:$PORT app:app
+    startCommand: gunicorn -b 0.0.0.0:$PORT app:main
     envVars:
       - key: PYTHONUNBUFFERED
         value: "1"
       - key: FLASK_ENV
         value: "production"
+
     autoDeploy: true
