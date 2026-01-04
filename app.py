@@ -12,76 +12,115 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS for Apple-like Dark Theme
-st.markdown("""
+# Initialize Session State for Theme
+if 'theme_mode' not in st.session_state:
+    st.session_state.theme_mode = 'Dark'
+
+def toggle_theme():
+    if st.session_state.theme_mode == 'Dark':
+        st.session_state.theme_mode = 'Light'
+    else:
+        st.session_state.theme_mode = 'Dark'
+
+# Define Theme Colors
+themes = {
+    'Dark': {
+        'bg_gradient': 'linear-gradient(-45deg, #0b0f19, #1a1f2e, #111827, #0f172a)',
+        'text': '#e2e8f0',
+        'card_bg': '#1e293b',
+        'card_border': '#334155',
+        'input_bg': '#0f172a',
+        'header': '#f8fafc',
+        'shadow': '0 10px 15px -3px rgba(0, 0, 0, 0.3)'
+    },
+    'Light': {
+        'bg_gradient': 'linear-gradient(-45deg, #eff6ff, #f8fafc, #e0f2fe, #f1f5f9)',
+        'text': '#1e293b',
+        'card_bg': '#ffffff',
+        'card_border': '#e2e8f0',
+        'input_bg': '#f8fafc',
+        'header': '#0f172a',
+        'shadow': '0 10px 15px -3px rgba(0, 0, 0, 0.05)'
+    }
+}
+
+current_theme = themes[st.session_state.theme_mode]
+
+# Custom CSS with Dynamic Theme
+st.markdown(f"""
 <style>
-    /* Global Theme Overrides */
-    .stApp {
-        background-color: #0b0f19;
+    /* Breathing Gradient Animation */
+    @keyframes gradient {{
+        0% {{ background-position: 0% 50%; }}
+        50% {{ background-position: 100% 50%; }}
+        100% {{ background-position: 0% 50%; }}
+    }}
+
+    .stApp {{
+        background: {current_theme['bg_gradient']};
+        background-size: 400% 400%;
+        animation: gradient 15s ease infinite;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    }
+        color: {current_theme['text']};
+    }}
     
-    /* Text Inputs */
-    .stTextArea textarea {
-        background-color: #0f172a !important;
-        color: #e2e8f0 !important;
-        border: 1px solid #334155 !important;
-        border-radius: 12px;
-        font-size: 16px;
-    }
-    .stTextArea textarea:focus {
+    /* Card-like Text Areas (Quillbot Style) */
+    .stTextArea textarea {{
+        background-color: {current_theme['input_bg']} !important;
+        color: {current_theme['text']} !important;
+        border: 1px solid {current_theme['card_border']} !important;
+        border-radius: 16px;
+        font-size: 17px;
+        line-height: 1.6;
+        padding: 20px;
+        box-shadow: inset 0 2px 4px 0 rgba(0, 0, 0, 0.05);
+        transition: all 0.3s ease;
+    }}
+    
+    .stTextArea textarea:focus {{
         border-color: #3b82f6 !important;
-        box-shadow: 0 0 0 1px #3b82f6 !important;
-    }
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2) !important;
+        transform: translateY(-2px);
+    }}
+    
+    /* Headers */
+    h1, h2, h3, .stMarkdownContainer h1, .stMarkdownContainer h2 {{
+        color: {current_theme['header']} !important;
+        font-weight: 700;
+        letter-spacing: -0.5px;
+    }}
     
     /* Buttons */
-    .stButton button {
+    .stButton button {{
         background: linear-gradient(135deg, #3b82f6, #2563eb);
         color: white;
         border: none;
-        padding: 0.5rem 1rem;
-        border-radius: 30px;
+        padding: 0.75rem 1.5rem;
+        border-radius: 99px;
         font-weight: 600;
-        transition: all 0.2s;
+        font-size: 16px;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         width: 100%;
-    }
-    .stButton button:hover {
+        box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.4);
+    }}
+    .stButton button:hover {{
         filter: brightness(1.1);
-        transform: translateY(-1px);
-        box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
-    }
+        transform: translateY(-2px);
+        box-shadow: 0 10px 15px -3px rgba(59, 130, 246, 0.5);
+    }}
+    .stButton button:active {{
+        transform: translateY(0);
+    }}
     
-    /* Headers */
-    h1, h2, h3 {
-        color: #f8fafc !important;
-    }
+    /* Sidebar styling */
+    section[data-testid="stSidebar"] {{
+        background-color: {current_theme['card_bg']};
+        border-right: 1px solid {current_theme['card_border']};
+    }}
+    section[data-testid="stSidebar"] .stMarkdown {{
+        color: {current_theme['text']};
+    }}
     
-    /* Sidebar */
-    section[data-testid="stSidebar"] {
-        background-color: #1e293b;
-        border-right: 1px solid #334155;
-    }
-    
-    /* Sliders */
-    div[data-baseweb="slider"] div {
-        background-color: #3b82f6 !important;
-    }
-    
-    .status-box {
-        padding: 1rem;
-        border-radius: 8px;
-        margin-bottom: 1rem;
-    }
-    .success {
-        background-color: rgba(16, 185, 129, 0.2);
-        border: 1px solid #10b981;
-        color: #ecfdf5;
-    }
-    .error {
-        background-color: rgba(239, 68, 68, 0.2);
-        border: 1px solid #ef4444;
-        color: #fef2f2;
-    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -104,11 +143,8 @@ def setup_nltk():
         'stopwords'
     ]
     
-    status_text = st.empty()
-    
     for package in required_packages:
         try:
-            # Check if exists depending on the package type
             if 'punkt' in package:
                 nltk.data.find(f'tokenizers/{package}')
             elif 'wordnet' in package or 'omw' in package or 'stopwords' in package:
@@ -116,13 +152,9 @@ def setup_nltk():
             elif 'tagger' in package:
                 nltk.data.find(f'taggers/{package}')
         except LookupError:
-            # If not found, download it
-            # status_text.info(f"Downloading {package}...")
             nltk.download(package, download_dir=nltk_data_path, quiet=True)
-            # Also download to default for safety
             nltk.download(package, quiet=True)
             
-    # status_text.empty()
     return True
 
 # Initialize Engines
@@ -139,8 +171,18 @@ def load_engines():
 
 # Main App logic
 def main():
-    st.title("Paraphraser & Humanizer")
-    st.markdown("Transform AI-generated text into human-like content.")
+    # Header with title and toggle
+    col_header, col_toggle = st.columns([4, 1])
+    with col_header:
+        st.title("Paraphraser & Humanizer")
+        st.markdown("Transform AI-generated text into human-like content.")
+    with col_toggle:
+        st.write("") # Spacer
+        st.write("") 
+        if st.session_state.theme_mode == 'Dark':
+            st.button("☀️ Light Mode", on_click=toggle_theme, key="theme_toggle")
+        else:
+            st.button("🌙 Dark Mode", on_click=toggle_theme, key="theme_toggle")
     
     # Setup resources
     setup_nltk()
@@ -153,27 +195,32 @@ def main():
     # Sidebar Controls
     with st.sidebar:
         st.header("Settings")
-        intensity = st.slider("Intensity", 0.1, 1.0, 0.6, 0.1, help="Higher intensity means more changes to the text.")
-        humanize = st.checkbox("Humanize (AI Avoidance)", value=True, help="Adds variations to bypass AI detection.")
+        intensity = st.slider("Intensity", 0.1, 1.0, 0.6, 0.1)
+        humanize = st.checkbox("Humanize (AI Avoidance)", value=True)
         
-        st.markdown("---")
-        st.markdown("### How it works")
-        st.info("""
-        1. **Paraphrase**: Replaces words with context-appropriate synonyms.
-        2. **Humanize**: Adds natural imperfections and structure variations.
-        3. **Validate**: Checks if meaning is preserved.
-        """)
+        st.markdown(f"""
+        <div style='background-color: {current_theme['input_bg']}; padding: 15px; border-radius: 12px; margin-top: 20px; border: 1px solid {current_theme['card_border']}'>
+            <h4 style='margin:0; color:{current_theme['text']}'>How it works</h4>
+            <ul style='color:{current_theme['text']}; font-size: 14px; padding-left: 20px; margin-top: 10px'>
+                <li><b>Paraphrase</b>: Context-aware synonym replacement</li>
+                <li><b>Humanize</b>: Structural variations for natural flow</li>
+                <li><b>Validate</b>: Logic & meaning checks</li>
+            </ul>
+        </div>
+        """, unsafe_allow_html=True)
         
         st.markdown("---")
         st.caption("Runs locally with Python")
 
     # Main Area
+    st.write("") # Spacer
     col1, col2 = st.columns(2)
     
     with col1:
         st.subheader("Original Text")
-        input_text = st.text_area("Input", height=350, placeholder="Paste your text here...", label_visibility="collapsed")
+        input_text = st.text_area("Input", height=400, placeholder="Paste your text here...", label_visibility="collapsed")
         
+        st.write("")
         process_btn = st.button("Paraphrase Text 🪄")
 
     # Processing State
@@ -199,7 +246,7 @@ def main():
 
     with col2:
         st.subheader("Result")
-        st.text_area("Output", value=st.session_state.output_text, height=350, label_visibility="collapsed")
+        st.text_area("Output", value=st.session_state.output_text, height=400, label_visibility="collapsed")
         
         if st.session_state.output_text:
             st.success("Processing complete!")
