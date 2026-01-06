@@ -1,6 +1,6 @@
 import streamlit as st
 import nltk
-from paraphraser import ParaphraserEngine, SemanticValidator
+from paraphraser import ParaphraserEngine, SemanticValidator, NeuralEngine
 from ai_avoider import AIDetectionAvoider
 import os
 
@@ -169,6 +169,16 @@ def load_engines():
         st.error(f"Error initializing engines: {e}")
         return None, None, None
 
+@st.cache_resource
+def load_neural_engine():
+    try:
+        # Using distilroberta-base as requested (standard Python version of Xenova/distilroberta-base)
+        # cache_dir ensures it doesn't download every time
+        return NeuralEngine(model_name="distilroberta-base", cache_dir="./model_cache")
+    except Exception as e:
+        st.error(f"Error loading neural engine: {e}")
+        return None
+
 # Main App logic
 def main():
     # Header with title and toggle
@@ -195,8 +205,16 @@ def main():
     # Sidebar Controls
     with st.sidebar:
         st.header("Settings")
+        mode = st.radio("Paraphrase Mode", ["Basic (NLTK)", "Neural (AI Model)"], help="Basic is faster, Neural is more context-aware.")
         intensity = st.slider("Intensity", 0.1, 1.0, 0.6, 0.1)
         humanize = st.checkbox("Humanize (AI Avoidance)", value=True)
+        
+        # Load neural engine if needed
+        neural_engine = None
+        if mode == "Neural (AI Model)":
+            neural_engine = load_neural_engine()
+            if not neural_engine:
+                st.warning("Neural engine failed to load. Falling back to Basic mode.")
         
         st.markdown(f"""
         <div style='background-color: {current_theme['input_bg']}; padding: 15px; border-radius: 12px; margin-top: 20px; border: 1px solid {current_theme['card_border']}'>
@@ -231,7 +249,7 @@ def main():
         with st.spinner("Processing..."):
             try:
                 # Step 1: Paraphrase
-                result = engine.paraphrase(input_text, intensity)
+                result = engine.paraphrase(input_text, intensity, neural_engine=neural_engine)
                 
                 # Step 2: Humanize
                 if humanize:

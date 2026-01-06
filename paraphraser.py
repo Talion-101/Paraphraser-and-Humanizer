@@ -5,6 +5,11 @@ from nltk.tag import pos_tag
 from nltk.corpus import stopwords
 import random
 import re
+try:
+    from transformers import pipeline
+    TRANSFORMERS_AVAILABLE = True
+except ImportError:
+    TRANSFORMERS_AVAILABLE = False
 
 # Try to import better-profanity for content filtering
 try:
@@ -39,6 +44,53 @@ try:
     nltk.data.find('corpora/stopwords')
 except LookupError:
     nltk.download('stopwords')
+
+
+class NeuralEngine:
+    """
+    Uses a Transformer model (Masked Language Model) to predict context-aware synonyms.
+    """
+    def __init__(self, model_name="distilroberta-base", cache_dir="./model_cache"):
+        if TRANSFORMERS_AVAILABLE:
+            try:
+                self.mask_filler = pipeline(
+                    "fill-mask", 
+                    model=model_name, 
+                    model_kwargs={"cache_dir": cache_dir}
+                )
+                self.tokenizer = self.mask_filler.tokenizer
+            except Exception as e:
+                print(f"Error loading transformer: {e}")
+                self.mask_filler = None
+        else:
+            self.mask_filler = None
+
+    def get_contextual_synonyms(self, sentence, word, pos, top_k=5):
+        """Predict synonyms that fit the specific sentence context."""
+        if not self.mask_filler:
+            return []
+            
+        # Create masked sentence
+        # We need to be careful with exact word matching for replacement
+        masked_sentence = sentence.replace(word, self.tokenizer.mask_token, 1)
+        
+        try:
+            results = self.mask_filler(masked_sentence, top_k=top_k*2)
+            
+            # Simple POS mapping for validation
+            # Roberta usually gives lowercase, so we need to filter
+            candidates = []
+            for res in results:
+                candidate = res['token_str'].strip().lower()
+                # Basic filters
+                if (candidate != word.lower() and 
+                    candidate.isalpha() and 
+                    len(candidate) > 2):
+                    candidates.append(candidate)
+            
+            return candidates[:top_k]
+        except Exception:
+            return []
 
 
 class ParaphraserEngine:
@@ -368,7 +420,7 @@ class ParaphraserEngine:
         result = ' '.join(cleaned_words)
         return result
     
-    def paraphrase(self, text, intensity=0.6):
+    def paraphrase(self, text, intensity=0.6, neural_engine=None):
         """
         Main paraphrasing method that applies multiple techniques.
         Preserves paragraph structure from input.
@@ -376,6 +428,7 @@ class ParaphraserEngine:
         Args:
             text: Input text to paraphrase
             intensity: Strength of paraphrasing (0.0 to 1.0)
+            neural_engine: Optional NeuralEngine instance for context-aware synonyms
         
         Returns:
             Paraphrased text with original paragraph structure preserved
@@ -402,7 +455,10 @@ class ParaphraserEngine:
             result = paragraph
             
             # Step 1: Replace with synonyms
-            result = self.replace_with_synonyms(result, intensity * 0.7)
+            if neural_engine and intensity > 0.3:
+                 result = self.neural_synonyms(result, intensity, neural_engine)
+            else:
+                 result = self.replace_with_synonyms(result, intensity * 0.7)
             
             # Step 2: Add variations
             result = self.add_variations(result)
@@ -416,8 +472,36 @@ class ParaphraserEngine:
             
             paraphrased_paragraphs.append(result)
         
-        # Rejoin paragraphs with double newlines
-        return '\n\n'.join(paraphrased_paragraphs)
+    def neural_synonyms(self, text, intensity, neural_engine):
+        """Use the neural engine to replace words contextually."""
+        sentences = sent_tokenize(text)
+        paraphrased_sentences = []
+        
+        for sentence in sentences:
+            tokens = word_tokenize(sentence)
+            pos_tags = pos_tag(tokens)
+            
+            current_sentence = sentence
+            new_tokens = list(tokens)
+            
+            # Identify candidates for neural replacement
+            for i, (word, pos) in enumerate(pos_tags):
+                if (word.lower() not in self.stop_words and 
+                    word.isalpha() and 
+                    len(word) > 4 and 
+                    random.random() < intensity * 0.6):
+                    
+                    # Ask neural engine for suggestions
+                    suggestions = neural_engine.get_contextual_synonyms(current_sentence, word, pos)
+                    if suggestions:
+                        # Pick a suggestion
+                        new_tokens[i] = random.choice(suggestions)
+                        # Rebuild sentence to maintain context for next word in THIS sentence
+                        current_sentence = self.join_tokens_properly(new_tokens)
+            
+            paraphrased_sentences.append(current_sentence)
+            
+        return ' '.join(paraphrased_sentences)
 
 
 class SemanticValidator:
