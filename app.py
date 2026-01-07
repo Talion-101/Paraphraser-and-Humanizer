@@ -179,9 +179,8 @@ def load_engines():
 @st.cache_resource
 def load_neural_engine():
     try:
-        # Using distilroberta-base as requested (standard Python version of Xenova/distilroberta-base)
-        # cache_dir ensures it doesn't download every time
-        return NeuralEngine(model_name="distilroberta-base", cache_dir="./model_cache")
+        # Simplified: Path is now handled internally in ParaphraserEngine
+        return NeuralEngine(model_name="prajjwal1/bert-tiny")
     except Exception as e:
         st.error(f"Error loading neural engine: {e}")
         return None
@@ -230,6 +229,17 @@ def main():
                 <li><b>Paraphrase</b>: Context-aware synonym replacement</li>
                 <li><b>Humanize</b>: Structural variations for natural flow</li>
                 <li><b>Validate</b>: Logic & meaning checks</li>
+            </ul>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        st.markdown(f"""
+        <div style='background-color: {current_theme['input_bg']}; padding: 15px; border-radius: 12px; margin-top: 20px; border: 1px solid {current_theme['card_border']}'>
+            <h4 style='margin:0; color:{current_theme['text']}'>Security & Privacy</h4>
+            <ul style='color:{current_theme['text']}; font-size: 14px; padding-left: 20px; margin-top: 10px'>
+                <li>🔒 <b>100% Local</b>: No external APIs used</li>
+                <li>🛡️ <b>Self-Contained</b>: AI model runs on your machine</li>
+                <li>📝 <b>Sanitized</b>: Automatic input cleaning</li>
             </ul>
         </div>
         """, unsafe_allow_html=True)

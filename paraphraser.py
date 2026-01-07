@@ -50,9 +50,13 @@ class NeuralEngine:
     """
     Uses a Transformer model (Masked Language Model) to predict context-aware synonyms.
     """
-    def __init__(self, model_name="distilroberta-base", cache_dir="./model_cache"):
+    def __init__(self, model_name="prajjwal1/bert-tiny"):
         if TRANSFORMERS_AVAILABLE:
             try:
+                # Calculate absolute path to model_cache inside the streamlit_app folder
+                current_dir = os.path.dirname(os.path.abspath(__file__))
+                cache_dir = os.path.join(current_dir, "model_cache")
+                
                 self.mask_filler = pipeline(
                     "fill-mask", 
                     model=model_name, 
@@ -420,6 +424,19 @@ class ParaphraserEngine:
         result = ' '.join(cleaned_words)
         return result
     
+    def sanitize_input(self, text):
+        """Basic sanitization to strip potential HTML/script tags and limit length."""
+        if not text:
+            return ""
+        
+        # Limit input length to 10,000 characters to prevent memory exhaustion
+        text = text[:10000]
+        
+        # Strip common HTML tags as a precaution
+        text = re.sub(r'<[^>]*>', '', text)
+        
+        return text.strip()
+
     def paraphrase(self, text, intensity=0.6, neural_engine=None):
         """
         Main paraphrasing method that applies multiple techniques.
@@ -433,6 +450,7 @@ class ParaphraserEngine:
         Returns:
             Paraphrased text with original paragraph structure preserved
         """
+        text = self.sanitize_input(text)
         if not text or not text.strip():
             return text
         
