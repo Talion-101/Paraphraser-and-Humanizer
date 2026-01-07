@@ -277,7 +277,9 @@ def main():
                 
                 st.session_state.output_text = result
             except Exception as e:
+                import traceback
                 st.error(f"An error occurred: {str(e)}")
+                st.code(traceback.format_exc())
 
     with col2:
         st.subheader("Result")

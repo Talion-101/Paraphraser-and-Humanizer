@@ -85,9 +85,10 @@ class NeuralEngine:
             # Roberta usually gives lowercase, so we need to filter
             candidates = []
             for res in results:
-                candidate = res['token_str'].strip().lower()
+                candidate = res.get('token_str', '').strip().lower()
                 # Basic filters
-                if (candidate != word.lower() and 
+                if (candidate and 
+                    candidate != (word.lower() if word else "") and 
                     candidate.isalpha() and 
                     len(candidate) > 2):
                     candidates.append(candidate)
@@ -306,7 +307,7 @@ class ParaphraserEngine:
             paraphrased_tokens = []
             for word, pos in pos_tags:
                 # Skip punctuation and stop words with lower probability
-                if word.lower() in self.stop_words or not word.isalpha() or len(word) < 4:
+                if not word or word.lower() in self.stop_words or not word.isalpha() or len(word) < 4:
                     paraphrased_tokens.append(word)
                 else:
                     # Increased replacement intensity with quality filters
@@ -506,7 +507,7 @@ class ParaphraserEngine:
             
             # Identify candidates for neural replacement
             for i, (word, pos) in enumerate(pos_tags):
-                if (word.lower() not in self.stop_words and 
+                if (word and word.lower() not in self.stop_words and 
                     word.isalpha() and 
                     len(word) > 4 and 
                     random.random() < intensity * 0.6):
@@ -577,8 +578,8 @@ class SemanticValidator:
         added_terms = paraphrased_terms - original_terms
         
         # Calculate text length ratio (should be similar)
-        original_length = len(original_text.split())
-        paraphrased_length = len(paraphrased_text.split())
+        original_length = len(original_text.split()) if original_text else 0
+        paraphrased_length = len(paraphrased_text.split()) if paraphrased_text else 0
         length_ratio = min(paraphrased_length, original_length) / max(paraphrased_length, original_length) * 100
         
         # Overall assessment
@@ -649,7 +650,7 @@ class SemanticValidator:
             modified = sentence
             # Check each missing term
             for term in missing_terms:
-                if term.lower() not in modified.lower() and len(modified) > 30:
+                if term and modified and term.lower() not in modified.lower() and len(modified) > 30:
                     # This sentence could benefit from including this term
                     # Try to add it naturally
                     words = modified.split()
