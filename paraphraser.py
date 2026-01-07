@@ -490,6 +490,8 @@ class ParaphraserEngine:
             
             paraphrased_paragraphs.append(result)
         
+        # Rejoin paragraphs with double newlines
+        return '\n\n'.join(paraphrased_paragraphs)
     def neural_synonyms(self, text, intensity, neural_engine):
         """Use the neural engine to replace words contextually."""
         sentences = sent_tokenize(text)
@@ -533,6 +535,8 @@ class SemanticValidator:
     
     def extract_key_terms(self, text):
         """Extract key terms (nouns and important verbs) from text."""
+        if not text:
+            return set()
         tokens = word_tokenize(text.lower())
         pos_tags = pos_tag(tokens)
         
