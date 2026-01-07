@@ -62,7 +62,7 @@ class AIDetectionAvoider:
                         insert_pos = random.randint(1, min(2, len(words)-1))
                         words.insert(insert_pos, filler)
                         modified = " ".join(words)
-                    elif modified and modified[0].isupper() and random.random() < 0.2:
+                    elif modified[0].isupper() and random.random() < 0.2:
                         modified = f"{filler} {modified[0].lower()}{modified[1:]}"
                 
                 # Occasionally use transition phrases (reduced)
@@ -70,8 +70,7 @@ class AIDetectionAvoider:
                     transition = random.choice(self.transition_phrases)
                     if not modified.startswith(transition):
                         transition_clean = transition.rstrip(',')
-                        if modified:
-                            modified = f"{transition_clean} {modified[0].lower()}{modified[1:] if len(modified) > 1 else ''}"
+                        modified = f"{transition_clean} {modified[0].lower()}{modified[1:] if len(modified) > 1 else ''}"
                 
                 # Add occasional parenthetical remarks (less frequent)
                 if len(modified.split()) > 8 and random.random() < intensity * 0.05:
@@ -163,7 +162,7 @@ class AIDetectionAvoider:
                     verb_pos = None
                     
                     for j, word in enumerate(words):
-                        if word and word.lower() in ['is', 'are', 'was', 'were', 'be', 'been']:
+                        if word.lower() in ['is', 'are', 'was', 'were', 'be', 'been']:
                             verb_pos = j
                             break
                     

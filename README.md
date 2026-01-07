@@ -2,6 +2,8 @@
 
 This folder contains the code for the Streamlit version of the application.
 
+Additionally, here is the publicically hosted Streamlit link so you can test and run - [https://paraphraser-and-humanizer-4yjtggjtba5kpdpaehd6cm.streamlit.app/]
+
 ## 🚀 How to Run Locally
 
 1.  **Install Streamlit**:
@@ -27,3 +29,4 @@ This folder contains the code for the Streamlit version of the application.
 - **Pure Python**: Runs your custom NLTK logic directly on the server.
 - **Easy Deployment**: Streamlit Community Cloud is free and very easy to set up.
 - **Dark Theme**: Custom styling applied to match your preference.
+
