@@ -2,8 +2,9 @@ import streamlit as st
 import nltk
 import sys
 import os
+import traceback
 
-# Ensure the local directory is in sys.path for correct imports
+# Ensure the local directory is in sys.path
 current_dir = os.path.dirname(os.path.abspath(__file__))
 if current_dir not in sys.path:
     sys.path.insert(0, current_dir)
@@ -15,278 +16,108 @@ from ai_avoider import AIDetectionAvoider
 st.set_page_config(
     page_title="Paraphraser & Humanizer",
     page_icon="🪄",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    layout="wide"
 )
 
-# Initialize Session State for Theme
-if 'theme_mode' not in st.session_state:
-    st.session_state.theme_mode = 'Dark'
+# Initialize Session State
+if 'theme' not in st.session_state: st.session_state.theme = 'Dark'
+if 'output' not in st.session_state: st.session_state.output = ""
 
-def toggle_theme():
-    if st.session_state.theme_mode == 'Dark':
-        st.session_state.theme_mode = 'Light'
-    else:
-        st.session_state.theme_mode = 'Dark'
+# Simple Theme Toggle
+def toggle():
+    st.session_state.theme = 'Light' if st.session_state.theme == 'Dark' else 'Dark'
 
-# Define Theme Colors
-themes = {
-    'Dark': {
-        'bg_gradient': 'linear-gradient(-45deg, #0b0f19, #1a1f2e, #111827, #0f172a)',
-        'text': '#e2e8f0',
-        'card_bg': '#1e293b',
-        'card_border': '#334155',
-        'input_bg': '#0f172a',
-        'header': '#f8fafc',
-        'shadow': '0 10px 15px -3px rgba(0, 0, 0, 0.3)'
-    },
-    'Light': {
-        'bg_gradient': 'linear-gradient(-45deg, #eff6ff, #f8fafc, #e0f2fe, #f1f5f9)',
-        'text': '#1e293b',
-        'card_bg': '#ffffff',
-        'card_border': '#e2e8f0',
-        'input_bg': '#f8fafc',
-        'header': '#0f172a',
-        'shadow': '0 10px 15px -3px rgba(0, 0, 0, 0.05)'
-    }
-}
+# UI Colors
+is_dark = st.session_state.theme == 'Dark'
+bg = "#0f172a" if is_dark else "#f8fafc"
+text = "#f8fafc" if is_dark else "#0f172a"
+card = "#1e293b" if is_dark else "#ffffff"
 
-current_theme = themes[st.session_state.theme_mode]
-
-# Custom CSS with Dynamic Theme
 st.markdown(f"""
 <style>
-    /* Breathing Gradient Animation */
-    @keyframes gradient {{
-        0% {{ background-position: 0% 50%; }}
-        50% {{ background-position: 100% 50%; }}
-        100% {{ background-position: 0% 50%; }}
-    }}
-
-    .stApp {{
-        background: {current_theme['bg_gradient']};
-        background-size: 400% 400%;
-        animation: gradient 15s ease infinite;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-        color: {current_theme['text']};
-    }}
-    
-    /* Card-like Text Areas (Quillbot Style) */
-    .stTextArea textarea {{
-        background-color: {current_theme['input_bg']} !important;
-        color: {current_theme['text']} !important;
-        border: 1px solid {current_theme['card_border']} !important;
-        border-radius: 16px;
-        font-size: 17px;
-        line-height: 1.6;
-        padding: 20px;
-        box-shadow: inset 0 2px 4px 0 rgba(0, 0, 0, 0.05);
-        transition: all 0.3s ease;
-    }}
-    
-    .stTextArea textarea:focus {{
-        border-color: #3b82f6 !important;
-        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2) !important;
-        transform: translateY(-2px);
-    }}
-    
-    /* Headers */
-    h1, h2, h3, .stMarkdownContainer h1, .stMarkdownContainer h2 {{
-        color: {current_theme['header']} !important;
-        font-weight: 700;
-        letter-spacing: -0.5px;
-    }}
-    
-    /* Buttons */
-    .stButton button {{
-        background: linear-gradient(135deg, #3b82f6, #2563eb);
-        color: white;
-        border: none;
-        padding: 0.75rem 1.5rem;
-        border-radius: 99px;
-        font-weight: 600;
-        font-size: 16px;
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        width: 100%;
-        box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.4);
-    }}
-    .stButton button:hover {{
-        filter: brightness(1.1);
-        transform: translateY(-2px);
-        box-shadow: 0 10px 15px -3px rgba(59, 130, 246, 0.5);
-    }}
-    .stButton button:active {{
-        transform: translateY(0);
-    }}
-    
-    /* Sidebar styling */
-    section[data-testid="stSidebar"] {{
-        background-color: {current_theme['card_bg']};
-        border-right: 1px solid {current_theme['card_border']};
-    }}
-    section[data-testid="stSidebar"] .stMarkdown {{
-        color: {current_theme['text']};
-    }}
-    
+    .stApp {{ background-color: {bg}; color: {text}; }}
+    .stTextArea textarea {{ background-color: {card} !important; color: {text} !important; border-radius: 12px; }}
+    .stButton button {{ background: linear-gradient(135deg, #3b82f6, #2563eb); color: white; border-radius: 20px; }}
 </style>
 """, unsafe_allow_html=True)
 
-# Initialize NLTK
+# Resource Loading
 @st.cache_resource
-def setup_nltk():
-    """Download required NLTK data"""
-    nltk_data_path = os.path.join(os.getcwd(), "nltk_data")
-    if nltk_data_path not in nltk.data.path:
-        nltk.data.path.append(nltk_data_path)
+def get_resources():
+    nltk_path = os.path.join(os.getcwd(), "nltk_data")
+    if nltk_path not in nltk.data.path: nltk.data.path.append(nltk_path)
     
-    # List of required packages
-    required_packages = [
-        'punkt', 
-        'punkt_tab', 
-        'wordnet', 
-        'omw-1.4', 
-        'averaged_perceptron_tagger', 
-        'averaged_perceptron_tagger_eng', 
-        'stopwords'
-    ]
-    
-    for package in required_packages:
+    # Critical NLTK downloads
+    for pkg in ['punkt', 'wordnet', 'omw-1.4', 'averaged_perceptron_tagger', 'stopwords']:
         try:
-            if 'punkt' in package:
-                nltk.data.find(f'tokenizers/{package}')
-            elif 'wordnet' in package or 'omw' in package or 'stopwords' in package:
-                nltk.data.find(f'corpora/{package}')
-            elif 'tagger' in package:
-                nltk.data.find(f'taggers/{package}')
-        except LookupError:
-            nltk.download(package, download_dir=nltk_data_path, quiet=True)
-            nltk.download(package, quiet=True)
-            
-    return True
-
-# Initialize Engines
-@st.cache_resource
-def load_engines():
-    try:
-        engine = ParaphraserEngine()
-        avoider = AIDetectionAvoider()
-        validator = SemanticValidator()
-        return engine, avoider, validator
-    except Exception as e:
-        st.error(f"Error initializing engines: {e}")
-        return None, None, None
+            nltk.download(pkg, download_dir=nltk_path, quiet=True)
+        except: pass
+        
+    return ParaphraserEngine(), AIDetectionAvoider(), SemanticValidator()
 
 @st.cache_resource
-def load_neural_engine():
+def get_neural():
     try:
-        # Simplified: Path is now handled internally in ParaphraserEngine
         return NeuralEngine(model_name="prajjwal1/bert-tiny")
-    except Exception as e:
-        st.error(f"Error loading neural engine: {e}")
+    except:
         return None
 
-# Main App logic
 def main():
-    # Header with title and toggle
-    col_header, col_toggle = st.columns([4, 1])
-    with col_header:
-        st.title("Paraphraser & Humanizer")
-        st.markdown("Transform AI-generated text into human-like content.")
-    with col_toggle:
-        st.write("") # Spacer
-        st.write("") 
-        if st.session_state.theme_mode == 'Dark':
-            st.button("☀️ Light Mode", on_click=toggle_theme, key="theme_toggle")
-        else:
-            st.button("🌙 Dark Mode", on_click=toggle_theme, key="theme_toggle")
+    st.title("🪄 Paraphraser & Humanizer")
     
-    # Setup resources
-    setup_nltk()
-    engine, avoider, validator = load_engines()
+    # Engines
+    engine, avoider, validator = get_resources()
     
-    if not engine:
-        st.error("Failed to load application engines. Please check logs.")
-        return
-
-    # Sidebar Controls
+    # Sidebar
     with st.sidebar:
         st.header("Settings")
-        mode = st.radio("Paraphrase Mode", ["Basic (NLTK)", "Neural (AI Model)"], help="Basic is faster, Neural is more context-aware.")
-        intensity = st.slider("Intensity", 0.1, 1.0, 0.6, 0.1)
-        humanize = st.checkbox("Humanize (AI Avoidance)", value=True)
+        mode = st.radio("Mode", ["Basic", "Neural (AI)"])
+        intensity = st.slider("Intensity", 0.1, 1.0, 0.6)
+        do_humanize = st.checkbox("Humanize", value=True)
         
-        # Load neural engine if needed
-        neural_engine = None
-        if mode == "Neural (AI Model)":
-            neural_engine = load_neural_engine()
-            if not neural_engine:
-                st.warning("Neural engine failed to load. Falling back to Basic mode.")
+        if st.button("🌓 Toggle Theme"): toggle()
         
-        st.markdown(f"""
-        <div style='background-color: {current_theme['input_bg']}; padding: 15px; border-radius: 12px; margin-top: 20px; border: 1px solid {current_theme['card_border']}'>
-            <h4 style='margin:0; color:{current_theme['text']}'>How it works</h4>
-            <ul style='color:{current_theme['text']}; font-size: 14px; padding-left: 20px; margin-top: 10px'>
-                <li><b>Paraphrase</b>: Context-aware synonym replacement</li>
-                <li><b>Humanize</b>: Structural variations for natural flow</li>
-                <li><b>Validate</b>: Logic & meaning checks</li>
-            </ul>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        st.markdown(f"""
-        <div style='background-color: {current_theme['input_bg']}; padding: 15px; border-radius: 12px; margin-top: 20px; border: 1px solid {current_theme['card_border']}'>
-            <h4 style='margin:0; color:{current_theme['text']}'>Security & Privacy</h4>
-            <ul style='color:{current_theme['text']}; font-size: 14px; padding-left: 20px; margin-top: 10px'>
-                <li>🔒 <b>100% Local</b>: No external APIs used</li>
-                <li>🛡️ <b>Self-Contained</b>: AI model runs on your machine</li>
-                <li>📝 <b>Sanitized</b>: Automatic input cleaning</li>
-            </ul>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        st.markdown("---")
-        st.caption("Runs locally with Python")
+        st.info("🔒 100% Local & Private processing.")
 
-    # Main Area
-    st.write("") # Spacer
+    # Neural Engine logic
+    neural = None
+    if mode == "Neural (AI)":
+        neural = get_neural()
+        if not neural: st.warning("Neural model not found. Using Basic mode.")
+
+    # Layout
     col1, col2 = st.columns(2)
     
     with col1:
-        st.subheader("Original Text")
-        input_text = st.text_area("Input", height=400, placeholder="Paste your text here...", label_visibility="collapsed")
-        
-        st.write("")
-        process_btn = st.button("Paraphrase Text 🪄")
-
-    # Processing State
-    if 'output_text' not in st.session_state:
-        st.session_state.output_text = ""
-
-    if process_btn and input_text:
-        with st.spinner("Processing..."):
-            try:
-                # Step 1: Paraphrase
-                result = engine.paraphrase(input_text, intensity, neural_engine=neural_engine)
-                
-                # Step 2: Humanize
-                if humanize:
-                    result = avoider.humanize(result, intensity)
-                
-                # Step 3: Improve
-                result = validator.improve_paraphrase(input_text, result, engine)
-                
-                st.session_state.output_text = result
-            except Exception as e:
-                import traceback
-                st.error(f"An error occurred: {str(e)}")
-                st.code(traceback.format_exc())
+        st.subheader("Input")
+        inp = st.text_area("Paste text...", height=300, label_visibility="collapsed")
+        if st.button("Transform Text ✨"):
+            if inp:
+                with st.spinner("Processing..."):
+                    try:
+                        # 1. Paraphrase
+                        res = engine.paraphrase(inp, intensity, neural_engine=neural)
+                        
+                        # 2. Humanize
+                        if do_humanize and res:
+                            res = avoider.humanize(res, intensity)
+                        
+                        # 3. Validate & Improve
+                        if res:
+                            res = validator.improve_paraphrase(inp, res, engine)
+                        
+                        st.session_state.output = res or "Error: Processing produced no output."
+                    except Exception as e:
+                        st.error(f"Processing Error: {e}")
+                        st.code(traceback.format_exc())
+            else:
+                st.warning("Please enter some text.")
 
     with col2:
-        st.subheader("Result")
-        st.text_area("Output", value=st.session_state.output_text, height=400, label_visibility="collapsed")
-        
-        if st.session_state.output_text:
-            st.success("Processing complete!")
+        st.subheader("Output")
+        st.text_area("Result", value=st.session_state.output, height=300, label_visibility="collapsed")
+        if st.session_state.output:
+            st.success("Complete!")
 
 if __name__ == "__main__":
     main()
