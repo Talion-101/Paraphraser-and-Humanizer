@@ -88,7 +88,7 @@ class ParaphraserEngine:
     
     def get_synonyms(self, word, pos):
         """Get synonyms for a word based on its part of speech.
-        Smart selection that prioritizes natural, everyday language."""
+        Smart selection that prioritizes natural, everyday language and preserves meaning."""
         if word in self.synonym_cache:
             return self.synonym_cache[word]
         
@@ -136,18 +136,14 @@ class ParaphraserEngine:
                     synonym = lemma.name().replace('_', ' ')
                     synonym_lower = synonym.lower()
                     
-                    # Smart filter criteria - prioritize natural, everyday language
+                    # Smart filter criteria - prioritize natural, everyday language and preserve meaning
                     if (synonym_lower != word.lower() and 
                         synonym_lower not in skip_words and
-                        len(synonym) <= len(word) + 4 and  # Similar length - reasonable variation
-                        len(synonym) < 13 and  # Max 12 chars (avoid overly long words)
+                        len(synonym) <= len(word) + 3 and  # Similar length - reasonable variation
+                        len(synonym) < 12 and  # Max 11 chars (avoid overly long words)
                         ' ' not in synonym and  # Single words only
                         len(synonym) > 2 and  # At least 3 chars
-                        # Filter out extremely archaic patterns (but keep reasonable variations)
-                        not (synonym_lower.endswith('ate') and len(synonym) > 8) and  # Avoid very long -ate words
-                        not (synonym_lower.endswith('ize') and len(synonym) > 8) and  # Avoid very long -ize words
-                        not (synonym_lower.endswith('ify') and len(synonym) > 8) and  # Avoid very long -ify words
-                        # Filter out extremely uncommon letter patterns
+                        # Filter out extremely archaic patterns
                         'ae' not in synonym_lower and  # Very archaic pattern
                         'oe' not in synonym_lower and  # Very archaic pattern
                         # Filter out words with 4+ consecutive consonants (very rare)
@@ -164,8 +160,8 @@ class ParaphraserEngine:
             return (not is_common, length_score)
         
         synonyms = sorted(list(set(synonyms)), key=sort_key)
-        # Limit to 5 best options - more variety for better humanization
-        synonyms = synonyms[:5]
+        # Limit to 3 best options - fewer but higher quality
+        synonyms = synonyms[:3]
         self.synonym_cache[word] = synonyms
         return synonyms
     
@@ -207,7 +203,8 @@ class ParaphraserEngine:
         return final_text
     
     def replace_with_synonyms(self, text, intensity=0.5):
-        """Replace words with synonyms based on intensity."""
+        """Replace words with synonyms based on intensity.
+        Very conservative to preserve meaning - only replace when safe."""
         sentences = sent_tokenize(text)
         paraphrased_sentences = []
         
@@ -221,11 +218,19 @@ class ParaphraserEngine:
                 if word.lower() in self.stop_words or not word.isalpha() or len(word) < 4:
                     paraphrased_tokens.append(word)
                 else:
-                    # Increased replacement intensity with quality filters
-                    if random.random() < intensity:  # Direct intensity mapping
+                    # Very conservative replacement to preserve meaning
+                    # Use intensity * 0.3 to be extremely conservative
+                    if random.random() < intensity * 0.3:  # Extremely conservative
                         synonyms = self.get_synonyms(word, pos)
                         if synonyms:
-                            replacement = random.choice(synonyms)
+                            # Only use synonyms that are very common
+                            common_synonyms = [s for s in synonyms if s.lower() in self.common_words]
+                            if common_synonyms:
+                                replacement = random.choice(common_synonyms)
+                            else:
+                                # If no common synonyms, skip replacement
+                                paraphrased_tokens.append(word)
+                                continue
                             paraphrased_tokens.append(replacement)
                         else:
                             paraphrased_tokens.append(word)
