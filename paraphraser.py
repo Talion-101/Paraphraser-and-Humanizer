@@ -14,6 +14,25 @@ try:
 except ImportError:
     PROFANITY_AVAILABLE = False
 
+# Import Spacy and LanguageTool
+try:
+    import spacy
+    import language_tool_python
+    SPACY_AVAILABLE = True
+    LT_AVAILABLE = True
+except ImportError:
+    SPACY_AVAILABLE = False
+    LT_AVAILABLE = False
+
+# Download Spacy model if needed
+if SPACY_AVAILABLE:
+    try:
+        nlp = spacy.load("en_core_web_sm")
+    except OSError:
+        from spacy.cli import download
+        download("en_core_web_sm")
+        nlp = spacy.load("en_core_web_sm")
+
 # Download required NLTK data
 try:
     nltk.data.find('tokenizers/punkt')
@@ -51,6 +70,15 @@ class ParaphraserEngine:
         self.stop_words = set(stopwords.words('english'))
         self.synonym_cache = {}
         
+        # Initialize Grammar Checker
+        if LT_AVAILABLE:
+            try:
+                self.grammar_tool = language_tool_python.LanguageTool('en-US')
+            except Exception:
+                self.grammar_tool = None
+        else:
+            self.grammar_tool = None
+            
         # Advanced/overly complex words to avoid in output
         self.advanced_words = {
             'meliorate', 'elucidate', 'ameliorate', 'perplex', 'concatenate',
@@ -60,6 +88,27 @@ class ParaphraserEngine:
             'ubiquitous', 'juxtapose', 'dichotomy', 'paradigm', 'epistemological',
             'ontological', 'phenomenological', 'teleological', 'hermeneutical', 'dialectical'
         }
+
+    def get_protected_terms(self, text):
+        """
+        Identify named entities (People, Orgs, GPEs) that should NOT be paraphrased.
+        """
+        if not SPACY_AVAILABLE:
+            return set()
+            
+        doc = nlp(text)
+        protected = set()
+        
+        for ent in doc.ents:
+            # Protect People, Organizations, Countries/Cities, Dates, etc.
+            if ent.label_ in ['PERSON', 'ORG', 'GPE', 'LOC', 'DATE', 'TIME', 'EVENT', 'WORK_OF_ART']:
+                # Add the full entity text
+                protected.add(ent.text.lower())
+                # Add individual words if multi-word entity
+                for token in ent:
+                    protected.add(token.text.lower())
+                    
+        return protected
     
     def get_synonyms(self, word, pos):
         """Get synonyms for a word based on its part of speech.
@@ -247,6 +296,9 @@ class ParaphraserEngine:
     
     def replace_with_synonyms(self, text, intensity=0.5):
         """Replace words with synonyms based on intensity."""
+        # Get protected terms (Named Entities)
+        protected_terms = self.get_protected_terms(text)
+        
         sentences = sent_tokenize(text)
         paraphrased_sentences = []
         
@@ -256,8 +308,15 @@ class ParaphraserEngine:
             
             paraphrased_tokens = []
             for word, pos in pos_tags:
+                word_lower = word.lower()
+                
+                # PROTECTED TERM CHECK: Skip if words is part of a named entity
+                if word_lower in protected_terms:
+                    paraphrased_tokens.append(word)
+                    continue
+
                 # Skip punctuation and stop words with lower probability
-                if word.lower() in self.stop_words or not word.isalpha() or len(word) < 4:
+                if word_lower in self.stop_words or not word.isalpha() or len(word) < 4:
                     paraphrased_tokens.append(word)
                 else:
                     # IMPROVED SCALING: 
@@ -280,33 +339,75 @@ class ParaphraserEngine:
         return ' '.join(paraphrased_sentences)
     
     def restructure_sentences(self, text):
-        """Restructure sentences to vary sentence patterns."""
-        sentences = sent_tokenize(text)
-        restructured = []
+        """
+        Intelligently restructure sentences using dependency parsing (Spacy).
+        Safe clause swapping: "I went home because it rained" -> "Because it rained, I went home".
+        """
+        if not SPACY_AVAILABLE:
+            return text
+
+        doc = nlp(text)
+        restructured_sentences = []
         
-        for sentence in sentences:
-            # Simple restructuring by moving clauses or adding variations
-            sentence = sentence.strip()
-            if sentence.endswith('.'):
-                sentence = sentence[:-1]
+        for sent in doc.sents:
+            sent_text = sent.text
             
-            # Add variations
-            if random.random() < 0.3 and len(sentence) > 20:
-                # Sometimes restructure by moving subject
-                tokens = word_tokenize(sentence)
-                if len(tokens) > 5:
-                    # Shuffle some middle words (but not the beginning structure too much)
-                    mid_point = len(tokens) // 2
-                    if mid_point > 2:
-                        restructured.append(sentence + '.')
-                    else:
-                        restructured.append(sentence + '.')
-                else:
-                    restructured.append(sentence + '.')
-            else:
-                restructured.append(sentence + '.')
+            # CLAUSE SWAPPING
+            # Look for subordinating conjunctions (ADP/SCONJ mark) like 'because', 'since', 'if'
+            # Check if it's in the middle of the sentence
+            marker_token = None
+            for token in sent:
+                if token.dep_ == 'mark' and token.i > sent.start + 2:
+                    marker_token = token
+                    break
+            
+            if marker_token:
+                # We found a potential split point (e.g. "I eat [because] I am hungry")
+                # Split the sentence into Main Clause and Subordinate Clause
+                # Head of 'mark' is the verb of the subordinate clause
+                sub_clause_head = marker_token.head
+                # The subtree of that head is the subordinate clause
+                sub_clause_tokens = list(sub_clause_head.subtree)
+                sub_clause_start = sub_clause_tokens[0].i
+                sub_clause_end = sub_clause_tokens[-1].i
+                
+                # Check if sub clause is effectively the second half
+                if sub_clause_start > sent.start:
+                    # Construct new sentence: SubClause + "," + MainClause
+                    sub_clause_text = sent.doc[sub_clause_start:sub_clause_end+1].text
+                    # Main clause is everything else (simplified assumption)
+                    # Use slicing relative to doc
+                    main_clause_before = sent.doc[sent.start:sub_clause_start].text
+                    
+                    # Clean up punctuation
+                    sub_clause_text = sub_clause_text.strip(',.')
+                    main_clause_before = main_clause_before.strip(',.')
+                    
+                    # Capitalize first letter of new start
+                    sub_clause_text = sub_clause_text[0].upper() + sub_clause_text[1:]
+                    # Lowercase old start if it's not a proper noun
+                    first_word_main = sent.doc[sent.start]
+                    if first_word_main.pos_ != 'PROPN' and first_word_main.text != 'I':
+                        main_clause_before = main_clause_before[0].lower() + main_clause_before[1:]
+                        
+                    new_sent = f"{sub_clause_text}, {main_clause_before}."
+                    restructured_sentences.append(new_sent)
+                    continue
+
+            # Fallback: minor grammatical variations via regex (already exists in add_variations)
+            # Just keep original if no safe swap found
+            restructured_sentences.append(sent_text)
         
-        return ' '.join(restructured)
+        return ' '.join(restructured_sentences)
+        
+    def correct_grammar(self, text):
+        """Fix grammar errors using LanguageTool."""
+        if self.grammar_tool:
+            try:
+                return self.grammar_tool.correct(text)
+            except Exception:
+                return text
+        return text
     
     def add_variations(self, text):
         """Add minor grammatical variations."""
@@ -418,11 +519,15 @@ class ParaphraserEngine:
             # Step 2: Add variations
             result = self.add_variations(result)
             
-            # Step 3: Restructure (DISABLED TO KEEP STRUCTURE)
-            # if intensity > 0.8:  # Only at very high intensity
-            #     result = self.restructure_sentences(result)
+            # Step 3: Restructure (SAFE CLAUSE SWAPPING ENABLED)
+            if intensity > 0.4:
+                result = self.restructure_sentences(result)
             
-            # Step 4: Filter content for safety (DISABLED PER USER REQUEST)
+            # Step 4: Grammar Correction (NEW)
+            if self.grammar_tool:
+                result = self.correct_grammar(result)
+            
+            # Step 5: Filter content for safety (DISABLED PER USER REQUEST)
             # result = self.filter_content(result)
             
             paraphrased_paragraphs.append(result)
