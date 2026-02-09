@@ -54,7 +54,8 @@ class AIDetectionAvoider:
                 modified = sentence
                 
                 # Occasionally add filler words (reduced frequency)
-                if random.random() < intensity * 0.1:
+                # Boosted base chance for low intensity to ensure it works
+                if random.random() < (intensity * 0.15) + 0.05:
                     filler = random.choice(self.filler_words)
                     # Insert filler word at beginning or after first few words
                     if len(modified.split()) > 5 and random.random() < 0.3:
@@ -66,7 +67,7 @@ class AIDetectionAvoider:
                         modified = f"{filler} {modified[0].lower()}{modified[1:]}"
                 
                 # Occasionally use transition phrases (reduced)
-                if i > 0 and random.random() < intensity * 0.08:
+                if i > 0 and random.random() < (intensity * 0.1) + 0.05:
                     transition = random.choice(self.transition_phrases)
                     if not modified.startswith(transition):
                         transition_clean = transition.rstrip(',')
@@ -142,13 +143,11 @@ class AIDetectionAvoider:
         modified_paragraphs = []
         
         uncertainty_markers = [
-            "seems to",
-            "appears to",
-            "might",
-            "could",
-            "may",
-            "tends to",
             "arguably",
+            "possibly",
+            "perhaps",
+            "conceivably",
+            "presumably"
         ]
         
         for para in paragraphs:
@@ -197,7 +196,7 @@ class AIDetectionAvoider:
         # Apply techniques sequentially
         result = self.add_human_variations(result, intensity)
         
-        if intensity > 0.4:
+        if intensity > 0.8:  # Strict structure preservation - only merge at very high intensity
             result = self.vary_sentence_length(result)
         
         if intensity > 0.6:
