@@ -6,14 +6,6 @@ from nltk.corpus import stopwords
 import random
 import re
 
-# Try to import better-profanity for content filtering
-try:
-    from better_profanity import profanity
-    PROFANITY_AVAILABLE = True
-    profanity.load_censor_words()
-except ImportError:
-    PROFANITY_AVAILABLE = False
-
 # Download required NLTK data
 try:
     nltk.data.find('tokenizers/punkt')
@@ -96,13 +88,13 @@ class ParaphraserEngine:
     
     def get_synonyms(self, word, pos):
         """Get synonyms for a word based on its part of speech.
-        Prefers simpler, more common synonyms."""
+        Smart selection that prioritizes natural, everyday language."""
         if word in self.synonym_cache:
             return self.synonym_cache[word]
         
         synonyms = []
         
-        # Words that produce bad/offensive/archaic replacements - skip them entirely
+        # Words that should be skipped (too generic or context-specific)
         skip_words = {
             'paradigm', 'methodology', 'instantiate', 'utilize', 'facilitate',
             'approach', 'method', 'analysis', 'research', 'study', 'inquiry', 'enquiry',
@@ -111,349 +103,6 @@ class ParaphraserEngine:
             'student', 'teacher', 'researcher', 'participant', 'learner',
             'education', 'learning', 'teaching', 'academic', 'achievement',
             'context', 'meaning', 'theory', 'concept', 'framework'
-        }
-        
-        # Bad replacement words found in output - never use these
-        bad_replacements = {
-            'meliorate', 'elucidate', 'ameliorate', 'perplex', 'concatenate',
-            'obfuscate', 'cogitate', 'perambulate', 'soliloquy', 'ostentatious',
-            'pellucid', 'sesquipedalian', 'synecdoche', 'propitious', 'bucolic',
-            'wads', 'nidus', 'rankness', 'motley', 'eruditeness', 'amorphous',
-            'kinda', 'finis', 'kinship', 'coarse', 'mount', 'fighting',
-            'reside', 'dwell', 'pedantic', 'ofttimes', 'sooner',
-            'helot', 'serf', 'thrall', 'bondsman', 'racism', 'racist',
-            'slur', 'epithet', 'derogatory', 'offensive', 'bigot',
-            'slave', 'bondage', 'servitude', 'bondwoman', 'bondman',
-            # Bad replacements from 100% intensity test
-            'drill', 'bookman', 'inquire', 'phenomenon', 'feeler', 'decisive',
-            'stress', 'version', 'dispute', 'exit', 'realism', 'find', 'canvas',
-            'surmise', 'numeric', 'bod', 'sight', 'try', 'amend', 'run', 'omen',
-            'pawn', 'rout', 'immanent', 'call', 'import', 'soul', 'conduct',
-            'vulgar', 'admit', 'audience', 'radical', 'schoolroom', 'notice',
-            'comprehend', 'adjust', 'fullness', 'player', 'forte', 'sensibility',
-            'conflict', 'access', 'head', 'aim', 'seeking', 'exam', 'measure',
-            'deal', 'search', 'process', 'get', 'live', 'adopt', 'inducive',
-            'see', 'form', 'operation', 'schoolroom', 'muse', 'epistemic',
-            'hire', 'database', 'appears', 'proficiency', 'fixation', 'let',
-            'name', 'infer', 'bank', 'take', 'dynamic', 'use', 'read', 'sentience',
-            'condition', 'rigor', 'eubstance', 'value', 'still', 'issue',
-            'accent', 'rigour', 'elaborate', 'bill', 'raise', 'cogency', 'work',
-            'primal', 'fix', 'timber', 'brainwave', 'line', 'ask', 'inert',
-            'debar', 'alive', 'reading', 'summons', 'entire', 'societal', 'world',
-            'model', 'science', 'free', 'term', 'intent', 'finding', 'hold',
-            'conclusion', 'illation', 'tender', 'deem', 'eminence', 'possibly',
-            'full', 'argument', 'rest', 'vantage', 'limitation', 'preciseness',
-            'trend', 'treatment', 'program', 'still', 'nicety', 'case', 'gobs',
-            'sealed', 'otherwise', 'ply', 'consequently', 'field', 'scholar',
-            'sight', 'reply', 'know', 'last', 'complexness', 'mensurable',
-            'educator', 'adopt', 'variety', 'act',
-            # Additional bad replacements from second output
-            'event', 'attack', 'praxis', 'image', 'upshot', 'premise', 'premiss',
-            'remainder', 'speak', 'topic', 'prime', 'rationalist', 'note', 'assess',
-            'canvass', 'expend', 'lesson', 'resume', 'trial', 'settle', 'quite',
-            'realise', 'grouping', 'doings', 'notion', 'watching', 'instructor',
-            'profusion', 'paw', 'query', 'outgrowth', 'trace', 'sizing', 'educatee',
-            'lowly', 'target', 'shine', 'preeminence', 'tool', 'technique',
-            'numerical', 'tie', 'key', 'rule', 'drift', 'need', 'shape', 'office',
-            'substance', 'hit', 'cognizance', 'retainer', 'coming', 'similar',
-            'apply', 'trustiness', 'root', 'phallus', 'deep', 'report', 'set',
-            'essay', 'appeal', 'view', 'intact', 'metier', 'lector', 'residue',
-            'reward', 'care', 'charm', 'shade', 'lots', 'elaborated', 'bit',
-            'mogul', 'want', 'flux', 'formalize', 'valuate', 'expiation',
-            'substantive', 'revalue', 'bosom', 'ism',
-            # Additional non-academic words to avoid
-            'vogue', 'vulgarize', 'assemblage', 'cat\'s-paw', 'rede', 'germ', 'swan',
-            'derogate', 'appendage', 'racy', 'wee', 'overture', 'limpidity', 'palm',
-            'shew', 'sure', 'aroused', 'king', 'lotion', 'rack', 'rife', 'dissent',
-            'rivet', 'notably', 'universe', 'sketch', 'rootle', 'augur', 'mortal',
-            'breadth', 'mutual', 'reflexion',
-            # Additional problematic replacements that don't match original meaning
-            'pattern', 'effect', 'preparation', 'scheme', 'prevailing', 'effrontery',
-            'assembling', 'construe', 'vital', 'emphasise', 'pore', 'worthful', 'departure',
-            'prefer', 'yield', 'kind', 'bear', 'examine', 'better', 'prove', 'position',
-            'compare', 'variable', 'allot', 'belief', 'uncouth', 'observance', 'pupil',
-            'conform', 'motion', 'assay', 'serve', 'mensuration', 'survive', 'come',
-            'year', 'execution', 'differ', 'mull', 'decided', 'evidently', 'integrated',
-            'include', 'regress', 'close', 'sampling', 'demand', 'toy', 'part', 'too',
-            'consistence', 'validness', 'think', 'appraise', 'control', 'origin', 'survey',
-            'liken', 'stay', 'void', 'Still', 'function', 'Nevertheless', 'hear', 'procedure',
-            'fault', 'reality', 'degage', 'design', 'give', 'liberal', 'living', 'width',
-            'vulgarise', 'advance', 'limit', 'plow', 'style', 'evaluate', 'seize', 'forge',
-            'explicate', 'leave', 'tale', 'unveil', 'copy', 'clearly', 'sundry', 'realize',
-            'answer', 'offer', 'amply', 'treat', 'imply', 'resultant', 'pedagog', 'mix',
-            'hug', 'approaching', 'construe', 'assemble', 'depart', 'yield',
-            # Additional archaic and inappropriate words to avoid
-            'villein', 'epitome', 'sire', 'mensurate', 'presage', 'rendering',
-            'surmisal', 'watch', 'ponder', 'hardiness', 'bailiwick', 'withal', 'espouse',
-            'pedagogue',
-            # Additional formal/academic words to avoid
-            'utilize', 'facilitate', 'implement', 'demonstrate', 'illustrate',
-            'constitute', 'establish', 'determine', 'evaluate', 'assess',
-            'examine', 'investigate', 'analyze', 'explore', 'discover',
-            'identify', 'recognize', 'acknowledge', 'appreciate', 'comprehend',
-            'understand', 'perceive', 'discern', 'distinguish', 'differentiate',
-            'distinguish', 'differentiate', 'discriminate', 'differentiate',
-            'substantiate', 'corroborate', 'validate', 'verify', 'confirm',
-            'authenticate', 'certify', 'attest', 'witness', 'testify',
-            'articulate', 'express', 'convey', 'communicate', 'transmit',
-            'disseminate', 'propagate', 'circulate', 'distribute', 'spread',
-            'accumulate', 'amass', 'collect', 'gather', 'assemble',
-            'congregate', 'aggregate', 'consolidate', 'integrate', 'incorporate',
-            'merge', 'blend', 'combine', 'unite', 'join',
-            'connect', 'link', 'associate', 'relate', 'correlate',
-            'correspond', 'match', 'equate', 'parallel', 'resemble',
-            'simulate', 'imitate', 'mimic', 'emulate', 'reproduce',
-            'generate', 'produce', 'create', 'fabricate', 'manufacture',
-            'construct', 'build', 'erect', 'establish', 'found',
-            'originate', 'initiate', 'commence', 'begin', 'start',
-            'terminate', 'conclude', 'finalize', 'complete', 'finish',
-            'accomplish', 'achieve', 'attain', 'reach', 'realize',
-            'acquire', 'obtain', 'secure', 'procure', 'gain',
-            'retain', 'preserve', 'maintain', 'sustain', 'uphold',
-            'support', 'assist', 'aid', 'help', 'serve',
-            'benefit', 'advantage', 'profit', 'gain', 'improve',
-            'enhance', 'augment', 'amplify', 'magnify', 'intensify',
-            'strengthen', 'reinforce', 'fortify', 'consolidate', 'solidify',
-            'weaken', 'diminish', 'reduce', 'decrease', 'lessen',
-            'minimize', 'mitigate', 'alleviate', 'relieve', 'ease',
-            'eliminate', 'remove', 'eradicate', 'extinguish', 'abolish',
-            'abolish', 'annul', 'revoke', 'rescind', 'cancel',
-            'neglect', 'ignore', 'disregard', 'overlook', 'dismiss',
-            'reject', 'refuse', 'decline', 'deny', 'repudiate',
-            'oppose', 'resist', 'challenge', 'confront', 'face',
-            'encounter', 'meet', 'confront', 'face', 'brave',
-            'endure', 'withstand', 'tolerate', 'bear', 'suffer',
-            'experience', 'undergo', 'encounter', 'face', 'meet',
-            'participate', 'engage', 'involve', 'include', 'incorporate',
-            'comprise', 'consist', 'constitute', 'compose', 'form',
-            'represent', 'symbolize', 'signify', 'denote', 'indicate',
-            'suggest', 'imply', 'infer', 'deduce', 'conclude',
-            'assume', 'presume', 'suppose', 'surmise', 'guess',
-            'speculate', 'hypothesize', 'theorize', 'postulate', 'propose',
-            'recommend', 'advise', 'suggest', 'propose', 'advocate',
-            'encourage', 'inspire', 'motivate', 'stimulate', 'prompt',
-            'persuade', 'convince', 'influence', 'sway', 'affect',
-            'impact', 'affect', 'influence', 'shape', 'mold',
-            'transform', 'convert', 'change', 'alter', 'modify',
-            'adapt', 'adjust', 'accommodate', 'conform', 'suit',
-            'suit', 'fit', 'match', 'correspond', 'align',
-            'coordinate', 'organize', 'arrange', 'order', 'structure',
-            'systematize', 'standardize', 'regulate', 'control', 'manage',
-            'supervise', 'oversee', 'monitor', 'observe', 'watch',
-            'inspect', 'examine', 'scrutinize', 'analyze', 'study',
-            'investigate', 'explore', 'research', 'inquire', 'question',
-            'interrogate', 'interview', 'survey', 'poll', 'canvass',
-            'assess', 'evaluate', 'judge', 'rate', 'score',
-            'estimate', 'calculate', 'compute', 'reckon', 'figure',
-            'predict', 'forecast', 'anticipate', 'expect', 'foresee',
-            'project', 'envision', 'imagine', 'visualize', 'picture',
-            'design', 'plan', 'devise', 'conceive', 'create',
-            'develop', 'evolve', 'progress', 'advance', 'proceed',
-            'continue', 'persist', 'endure', 'last', 'remain',
-            'survive', 'live', 'exist', 'subsist', 'endure',
-            'flourish', 'thrive', 'prosper', 'succeed', 'prevail',
-            'dominate', 'prevail', 'rule', 'govern', 'control',
-            'govern', 'rule', 'reign', 'dominate', 'command',
-            'command', 'order', 'direct', 'instruct', 'guide',
-            'lead', 'guide', 'direct', 'steer', 'pilot',
-            'follow', 'pursue', 'chase', 'track', 'trace',
-            'search', 'seek', 'look', 'hunt', 'find',
-            'discover', 'find', 'locate', 'identify', 'detect',
-            'reveal', 'disclose', 'uncover', 'expose', 'unveil',
-            'conceal', 'hide', 'cover', 'mask', 'veil',
-            'protect', 'defend', 'guard', 'shield', 'safeguard',
-            'preserve', 'conserve', 'save', 'rescue', 'deliver',
-            'liberate', 'free', 'release', 'discharge', 'dismiss',
-            'employ', 'use', 'utilize', 'apply', 'exploit',
-            'waste', 'squander', 'misuse', 'abuse', 'misapply',
-            'damage', 'harm', 'hurt', 'injure', 'wound',
-            'repair', 'fix', 'mend', 'restore', 'renew',
-            'improve', 'better', 'enhance', 'upgrade', 'refine',
-            'worsen', 'deteriorate', 'decline', 'degenerate', 'decay',
-            'grow', 'develop', 'expand', 'increase', 'multiply',
-            'shrink', 'contract', 'decrease', 'reduce', 'diminish',
-            'rise', 'ascend', 'climb', 'mount', 'soar',
-            'fall', 'drop', 'descend', 'plunge', 'crash',
-            'move', 'shift', 'transfer', 'relocate', 'displace',
-            'transport', 'carry', 'convey', 'transfer', 'move',
-            'send', 'transmit', 'dispatch', 'deliver', 'convey',
-            'receive', 'get', 'obtain', 'acquire', 'gain',
-            'accept', 'receive', 'take', 'admit', 'acknowledge',
-            'reject', 'refuse', 'decline', 'deny', 'spurn',
-            'choose', 'select', 'pick', 'opt', 'decide',
-            'prefer', 'favor', 'like', 'enjoy', 'love',
-            'hate', 'dislike', 'loathe', 'detest', 'despise',
-            'fear', 'dread', 'terror', 'horror', 'panic',
-            'hope', 'wish', 'desire', 'want', 'need',
-            'believe', 'trust', 'faith', 'confidence', 'reliance',
-            'doubt', 'suspect', 'question', 'challenge', 'dispute',
-            'know', 'understand', 'comprehend', 'grasp', 'apprehend',
-            'learn', 'study', 'teach', 'educate', 'train',
-            'teach', 'instruct', 'educate', 'train', 'coach',
-            'read', 'write', 'speak', 'listen', 'hear',
-            'say', 'tell', 'speak', 'state', 'declare',
-            'ask', 'question', 'inquire', 'query', 'interrogate',
-            'answer', 'respond', 'reply', 'retort', 'counter',
-            'agree', 'consent', 'approve', 'accept', 'endorse',
-            'disagree', 'dissent', 'object', 'oppose', 'protest',
-            'promise', 'pledge', 'vow', 'swear', 'guarantee',
-            'threaten', 'menace', 'intimidate', 'coerce', 'force',
-            'help', 'assist', 'aid', 'support', 'serve',
-            'hurt', 'harm', 'damage', 'injure', 'wound',
-            'heal', 'cure', 'treat', 'remedy', 'restore',
-            'kill', 'murder', 'slay', 'execute', 'assassinate',
-            'die', 'perish', 'expire', 'decease', 'pass',
-            'live', 'survive', 'exist', 'subsist', 'endure',
-            'born', 'created', 'produced', 'generated', 'formed',
-            'begin', 'start', 'commence', 'initiate', 'launch',
-            'end', 'finish', 'complete', 'conclude', 'terminate',
-            'stop', 'halt', 'cease', 'quit', 'discontinue',
-            'go', 'proceed', 'advance', 'progress', 'continue',
-            'come', 'arrive', 'reach', 'approach', 'near',
-            'stay', 'remain', 'wait', 'abide', 'linger',
-            'leave', 'depart', 'go', 'exit', 'withdraw',
-            'enter', 'come', 'go', 'access', 'penetrate',
-            'exit', 'leave', 'depart', 'withdraw', 'retreat',
-            'open', 'close', 'shut', 'lock', 'unlock',
-            'fasten', 'secure', 'attach', 'connect', 'join',
-            'loosen', 'release', 'detach', 'disconnect', 'separate',
-            'break', 'smash', 'crush', 'shatter', 'fracture',
-            'build', 'construct', 'create', 'make', 'form',
-            'destroy', 'demolish', 'ruin', 'wreck', 'devastate',
-            'clean', 'wash', 'scrub', 'polish', 'shine',
-            'dirty', 'soil', 'stain', 'spot', 'mark',
-            'buy', 'purchase', 'acquire', 'obtain', 'get',
-            'sell', 'market', 'trade', 'exchange', 'deal',
-            'give', 'donate', 'grant', 'bestow', 'present',
-            'take', 'seize', 'grab', 'snatch', 'capture',
-            'steal', 'rob', 'thieve', 'pilfer', 'purloin',
-            'share', 'divide', 'split', 'separate', 'part',
-            'keep', 'hold', 'retain', 'maintain', 'preserve',
-            'lose', 'misplace', 'drop', 'forget', 'mislay',
-            'find', 'discover', 'locate', 'uncover', 'reveal',
-            'hide', 'conceal', 'cover', 'mask', 'veil',
-            'show', 'display', 'exhibit', 'present', 'demonstrate',
-            'see', 'look', 'watch', 'observe', 'view',
-            'hear', 'listen', 'attend', 'heed', 'notice',
-            'feel', 'touch', 'sense', 'perceive', 'experience',
-            'smell', 'scent', 'odor', 'fragrance', 'aroma',
-            'taste', 'flavor', 'savor', 'relish', 'enjoy',
-            'think', 'consider', 'ponder', 'reflect', 'meditate',
-            'remember', 'recall', 'recollect', 'reminisce', 'reflect',
-            'forget', 'lose', 'misplace', 'overlook', 'neglect',
-            'dream', 'imagine', 'fantasize', 'envision', 'visualize',
-            'wake', 'arise', 'awaken', 'rouse', 'stir',
-            'sleep', 'rest', 'slumber', 'nap', 'doze',
-            'eat', 'consume', 'devour', 'ingest', 'swallow',
-            'drink', 'sip', 'gulp', 'quaff', 'imbibe',
-            'laugh', 'chuckle', 'giggle', 'snicker', 'cackle',
-            'cry', 'weep', 'sob', 'wail', 'bawl',
-            'smile', 'grin', 'beam', 'smirk', 'simper',
-            'frown', 'scowl', 'grimace', 'pout', 'sulk',
-            'shout', 'yell', 'scream', 'shriek', 'bellow',
-            'whisper', 'murmur', 'mutter', 'mumble', 'murmur',
-            'sing', 'chant', 'carol', 'hum', 'croon',
-            'dance', 'prance', 'skip', 'hop', 'jump',
-            'run', 'sprint', 'dash', 'rush', 'race',
-            'walk', 'stroll', 'saunter', 'wander', 'roam',
-            'sit', 'seat', 'rest', 'settle', 'perch',
-            'stand', 'rise', 'mount', 'ascend', 'climb',
-            'lie', 'recline', 'rest', 'lounge', 'relax',
-            'fall', 'drop', 'plummet', 'tumble', 'topple',
-            'rise', 'ascend', 'climb', 'mount', 'soar',
-            'fly', 'soar', 'glide', 'float', 'hover',
-            'swim', 'dive', 'plunge', 'submerge', 'immerse',
-            'drive', 'ride', 'travel', 'journey', 'voyage',
-            'work', 'labor', 'toil', 'strive', 'struggle',
-            'play', 'game', 'sport', 'fun', 'recreation',
-            'fight', 'battle', 'war', 'combat', 'conflict',
-            'peace', 'calm', 'quiet', 'silence', 'stillness',
-            'love', 'hate', 'like', 'dislike', 'feel',
-            'happy', 'sad', 'glad', 'sorry', 'joyful',
-            'angry', 'mad', 'furious', 'irate', 'enraged',
-            'afraid', 'scared', 'frightened', 'terrified', 'petrified',
-            'brave', 'courageous', 'bold', 'fearless', 'daring',
-            'coward', 'timid', 'fearful', 'anxious', 'nervous',
-            'strong', 'weak', 'powerful', 'helpless', 'mighty',
-            'big', 'small', 'large', 'tiny', 'huge',
-            'fast', 'slow', 'quick', 'rapid', 'swift',
-            'hot', 'cold', 'warm', 'cool', 'freezing',
-            'good', 'bad', 'better', 'worse', 'best',
-            'right', 'wrong', 'correct', 'incorrect', 'true',
-            'false', 'real', 'fake', 'genuine', 'authentic',
-            'new', 'old', 'young', 'ancient', 'modern',
-            'first', 'last', 'beginning', 'end', 'middle',
-            'high', 'low', 'tall', 'short', 'deep',
-            'wide', 'narrow', 'broad', 'thin', 'thick',
-            'heavy', 'light', 'dark', 'bright', 'clear',
-            'clean', 'dirty', 'pure', 'impure', 'fresh',
-            'hard', 'soft', 'rough', 'smooth', 'sharp',
-            'dull', 'blunt', 'pointed', 'round', 'square',
-            'long', 'short', 'brief', 'extended', 'stretched',
-            'rich', 'poor', 'wealthy', 'impoverished', 'affluent',
-            'smart', 'stupid', 'intelligent', 'dumb', 'clever',
-            'wise', 'foolish', 'sensible', 'ridiculous', 'absurd',
-            'beautiful', 'ugly', 'pretty', 'hideous', 'attractive',
-            'important', 'trivial', 'significant', 'insignificant', 'major',
-            'easy', 'difficult', 'simple', 'complex', 'hard',
-            'safe', 'dangerous', 'secure', 'risky', 'hazardous',
-            'certain', 'uncertain', 'sure', 'unsure', 'definite',
-            'possible', 'impossible', 'probable', 'improbable', 'likely',
-            'always', 'never', 'sometimes', 'often', 'rarely',
-            'yes', 'no', 'maybe', 'perhaps', 'possibly',
-            'here', 'there', 'everywhere', 'nowhere', 'somewhere',
-            'now', 'then', 'later', 'soon', 'never',
-            'today', 'tomorrow', 'yesterday', 'tonight', 'morning',
-            'afternoon', 'evening', 'night', 'day', 'week',
-            'month', 'year', 'decade', 'century', 'millennium',
-            'one', 'two', 'three', 'four', 'five',
-            'six', 'seven', 'eight', 'nine', 'ten',
-            'hundred', 'thousand', 'million', 'billion', 'trillion',
-            'first', 'second', 'third', 'fourth', 'fifth',
-            'sixth', 'seventh', 'eighth', 'ninth', 'tenth',
-            'all', 'none', 'some', 'many', 'few',
-            'much', 'little', 'more', 'less', 'most',
-            'least', 'both', 'either', 'neither', 'each',
-            'every', 'any', 'some', 'no', 'none',
-            'who', 'what', 'where', 'when', 'why',
-            'how', 'which', 'whose', 'whom', 'this',
-            'that', 'these', 'those', 'it', 'they',
-            'he', 'she', 'we', 'you', 'i',
-            'me', 'him', 'her', 'us', 'them',
-            'my', 'your', 'his', 'her', 'its',
-            'our', 'their', 'mine', 'yours', 'hers',
-            'ours', 'theirs', 'myself', 'yourself', 'himself',
-            'herself', 'itself', 'ourselves', 'themselves', 'each',
-            'other', 'another', 'others', 'else', 'same',
-            'different', 'similar', 'alike', 'unlike', 'equal',
-            'better', 'worse', 'best', 'worst', 'good',
-            'bad', 'well', 'ill', 'fine', 'okay',
-            'so', 'very', 'too', 'quite', 'rather',
-            'just', 'only', 'even', 'still', 'already',
-            'also', 'too', 'as', 'well', 'either',
-            'neither', 'nor', 'both', 'and', 'but',
-            'or', 'yet', 'so', 'for', 'because',
-            'since', 'as', 'though', 'although', 'even',
-            'if', 'unless', 'until', 'while', 'when',
-            'where', 'whether', 'before', 'after', 'during',
-            'without', 'with', 'by', 'from', 'of',
-            'in', 'on', 'at', 'to', 'into',
-            'onto', 'upon', 'over', 'under', 'above',
-            'below', 'between', 'among', 'through', 'throughout',
-            'across', 'along', 'around', 'behind', 'before',
-            'after', 'beside', 'beyond', 'near', 'far',
-            'here', 'there', 'everywhere', 'nowhere', 'somewhere',
-            'up', 'down', 'out', 'off', 'away',
-            'back', 'forward', 'backward', 'sideways', 'around',
-            'again', 'once', 'twice', 'always', 'never',
-            'sometimes', 'often', 'rarely', 'seldom', 'usually',
-            'generally', 'typically', 'normally', 'naturally', 'certainly',
-            'definitely', 'probably', 'possibly', 'maybe', 'perhaps',
-            'please', 'thank', 'thanks', 'sorry', 'excuse',
-            'hello', 'hi', 'goodbye', 'bye', 'farewell',
-            'yes', 'no', 'okay', 'alright', 'sure',
-            'fine', 'good', 'great', 'excellent', 'wonderful',
-            'terrible', 'awful', 'horrible', 'bad', 'poor'
         }
         
         # Skip words that are already fine as-is
@@ -487,63 +136,36 @@ class ParaphraserEngine:
                     synonym = lemma.name().replace('_', ' ')
                     synonym_lower = synonym.lower()
                     
-                    # Enhanced filter criteria - prefer simpler, common words
+                    # Smart filter criteria - prioritize natural, everyday language
                     if (synonym_lower != word.lower() and 
                         synonym_lower not in skip_words and
-                        synonym_lower not in bad_replacements and
-                        len(synonym) <= len(word) + 3 and  # Similar length - keep it short
-                        len(synonym) < 11 and  # Max 10 chars (plain, simple words)
+                        len(synonym) <= len(word) + 4 and  # Similar length - reasonable variation
+                        len(synonym) < 13 and  # Max 12 chars (avoid overly long words)
                         ' ' not in synonym and  # Single words only
                         len(synonym) > 2 and  # At least 3 chars
-                        # Filter out archaic/formal patterns
-                        not synonym_lower.endswith('ate') and  # Avoid formal -ate words
-                        not synonym_lower.endswith('ize') and  # Avoid formal -ize words
-                        not synonym_lower.endswith('ify') and  # Avoid formal -ify words
-                        not synonym_lower.endswith('tion') and  # Avoid formal -tion words
-                        not synonym_lower.endswith('sion') and  # Avoid formal -sion words
-                        not synonym_lower.endswith('ment') and  # Avoid formal -ment words
-                        not synonym_lower.endswith('ness') and  # Avoid formal -ness words
-                        not synonym_lower.endswith('ity') and  # Avoid formal -ity words
-                        not synonym_lower.endswith('ance') and  # Avoid formal -ance words
-                        not synonym_lower.endswith('ence') and  # Avoid formal -ence words
-                        not synonym_lower.endswith('ant') and  # Avoid formal -ant words
-                        not synonym_lower.endswith('ent') and  # Avoid formal -ent words
-                        not synonym_lower.endswith('al') and  # Avoid formal -al words
-                        not synonym_lower.endswith('ic') and  # Avoid formal -ic words
-                        not synonym_lower.endswith('ive') and  # Avoid formal -ive words
-                        not synonym_lower.endswith('ful') and  # Avoid formal -ful words
-                        not synonym_lower.endswith('ous') and  # Avoid formal -ous words
-                        not synonym_lower.endswith('able') and  # Avoid formal -able words
-                        not synonym_lower.endswith('ible') and  # Avoid formal -ible words
-                        # Filter out uncommon letter patterns
-                        'ae' not in synonym_lower and  # Archaic pattern
-                        'oe' not in synonym_lower and  # Archaic pattern
-                        'ph' not in synonym_lower and  # Greek-derived (often formal)
-                        'rh' not in synonym_lower and  # Greek-derived (often formal)
-                        'pt' not in synonym_lower and  # Greek-derived (often formal)
-                        'sc' not in synonym_lower and  # Uncommon pattern
-                        'sch' not in synonym_lower and  # Uncommon pattern
-                        'ch' not in synonym_lower and  # Uncommon pattern
-                        'th' not in synonym_lower and  # Uncommon pattern
-                        'wh' not in synonym_lower and  # Uncommon pattern
-                        'qu' not in synonym_lower and  # Uncommon pattern
-                        'x' not in synonym_lower and  # Uncommon letter
-                        'z' not in synonym_lower and  # Uncommon letter
-                        # Filter out words with 3+ consecutive consonants
-                        not any(c1.isalpha() and c2.isalpha() and c3.isalpha() and 
-                               c1 not in 'aeiou' and c2 not in 'aeiou' and c3 not in 'aeiou'
-                               for c1, c2, c3 in zip(synonym_lower, synonym_lower[1:], synonym_lower[2:]))):
+                        # Filter out extremely archaic patterns (but keep reasonable variations)
+                        not (synonym_lower.endswith('ate') and len(synonym) > 8) and  # Avoid very long -ate words
+                        not (synonym_lower.endswith('ize') and len(synonym) > 8) and  # Avoid very long -ize words
+                        not (synonym_lower.endswith('ify') and len(synonym) > 8) and  # Avoid very long -ify words
+                        # Filter out extremely uncommon letter patterns
+                        'ae' not in synonym_lower and  # Very archaic pattern
+                        'oe' not in synonym_lower and  # Very archaic pattern
+                        # Filter out words with 4+ consecutive consonants (very rare)
+                        not any(c1.isalpha() and c2.isalpha() and c3.isalpha() and c4.isalpha() and 
+                               c1 not in 'aeiou' and c2 not in 'aeiou' and c3 not in 'aeiou' and c4 not in 'aeiou'
+                               for c1, c2, c3, c4 in zip(synonym_lower, synonym_lower[1:], synonym_lower[2:], synonym_lower[3:]))):
                         synonyms.append(synonym)
         
-        # Prioritize common words - sort with common words first, then by length
+        # Smart prioritization - prefer common words, then shorter words
         def sort_key(s):
             is_common = s.lower() in self.common_words
-            # Common words first (False=0, True=1, so we want False first), then by length
-            return (not is_common, len(s))
+            length_score = len(s)
+            # Common words first (False=0, True=1), then by length (shorter is simpler)
+            return (not is_common, length_score)
         
         synonyms = sorted(list(set(synonyms)), key=sort_key)
-        # Limit to 3 best options - prioritize common words
-        synonyms = synonyms[:3]
+        # Limit to 5 best options - more variety for better humanization
+        synonyms = synonyms[:5]
         self.synonym_cache[word] = synonyms
         return synonyms
     
@@ -678,40 +300,53 @@ class ParaphraserEngine:
     
     def filter_content(self, text):
         """
-        Filter output text to remove vulgar/racist content and advanced words.
-        Uses better-profanity if available, plus custom filters.
+        Smart content validation that checks if output makes sense.
+        Instead of filtering out words, this validates the quality of the paraphrase.
         
         Args:
-            text: Text to filter
+            text: Text to validate
             
         Returns:
-            Cleaned text safe for academic use
+            Validated text with quality improvements
         """
         if not text:
             return text
         
         result = text
         
-        # Filter using better-profanity if available
-        if PROFANITY_AVAILABLE:
-            result = profanity.censor(result)
-        
-        # Remove advanced academic words that are too complex
+        # Smart validation: Check for common issues that make text nonsensical
+        # 1. Check for repeated words (indicates poor paraphrasing)
         words = result.split()
-        cleaned_words = []
-        
-        for word in words:
-            # Extract the base word (remove punctuation)
-            base_word = re.sub(r'[^\w\s]', '', word)
+        if len(words) > 0:
+            # Check for excessive repetition
+            word_counts = {}
+            for word in words:
+                word_lower = word.lower().strip('.,!?;:')
+                if word_lower in word_counts:
+                    word_counts[word_lower] += 1
+                else:
+                    word_counts[word_lower] = 1
             
-            # Check if word is in advanced_words list
-            if base_word.lower() in self.advanced_words:
-                # Keep original word since it's likely from original text
-                cleaned_words.append(word)
-            else:
-                cleaned_words.append(word)
+            # If any word appears more than 3 times in a short text, it's likely poor quality
+            for word, count in word_counts.items():
+                if count > 3 and len(word) > 3:
+                    # This is excessive repetition - return original text
+                    return text
         
-        result = ' '.join(cleaned_words)
+        # 2. Check for sentence fragments (very short sentences)
+        sentences = result.split('.')
+        for sentence in sentences:
+            sentence = sentence.strip()
+            if sentence and len(sentence.split()) < 3:
+                # Very short sentence fragment - might be poor quality
+                pass  # We'll let it through, but could improve
+        
+        # 3. Check for proper spacing and punctuation
+        # Fix double spaces
+        result = re.sub(r' +', ' ', result)
+        # Fix space before punctuation
+        result = re.sub(r'\s+([.,!?;:])', r'\1', result)
+        
         return result
     
     def paraphrase(self, text, intensity=0.6):
@@ -1096,7 +731,7 @@ class SemanticValidator:
                             modified = modified[:insert_pos] + term + modified[insert_pos:]
                         break
                     
-                    # Pattern 2: Before a comma or period
+                    # Pattern 2: Before a comma or period (but not at the very end)
                     punctuation_matches = list(re.finditer(r'[,\.]', modified))
                     if punctuation_matches and len(punctuation_matches) > 1:
                         # Insert before the second-to-last punctuation
@@ -1104,11 +739,6 @@ class SemanticValidator:
                         insert_pos = match.start()
                         # Add space before the term
                         modified = modified[:insert_pos] + ', ' + term + modified[insert_pos:]
-                        break
-                    
-                    # Pattern 3: At the end of the sentence (before period)
-                    if modified.endswith('.'):
-                        modified = modified[:-1] + ', including ' + term + '.'
                         break
             
             modified_sentences.append(modified)
